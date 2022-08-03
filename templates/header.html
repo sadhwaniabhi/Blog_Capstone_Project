@@ -38,7 +38,14 @@
           <li class="nav-item">
             <a class="nav-link" href="{{ url_for('get_all_posts') }}">Home</a>
           </li>
-          {% if not logged_in %}
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('about') }}">About</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{{ url_for('contact') }}">Contact</a>
+          </li>
+            
+          {% if not current_user.is_authenticated %}
             <li class="nav-item">
               <a class="nav-link" href="{{ url_for('login') }}">Login</a>
             </li>
@@ -48,13 +55,6 @@
           {% endif %}
           <li class="nav-item">
             <a class="nav-link" href="{{ url_for('logout') }}">Log Out</a>
-          </li>
-    
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('about') }}">About</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="{{ url_for('contact') }}">Contact</a>
           </li>
         </ul>
       </div>
