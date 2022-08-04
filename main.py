@@ -41,7 +41,12 @@ def load_user(user_id):
 # ----------- Connection to DB ---------------------- #
 
 # here env variable database_url is used to use postgresql provided by heroku, and blog.db is provided incase database_url doesn't work
-app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL", "sqlite:///blog.db")
+# newer versions of sqlalchemy has removed the support for "postgres://" uri scheme for postgresql database
+database_uri = os.environ.get("DATABASE_URL", "sqlite:///blog.db" )
+if database_uri.startswith("postgres://"):
+    database_uri = database_uri.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_uri
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
