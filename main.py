@@ -40,7 +40,7 @@ def load_user(user_id):
 
 # ----------- Connection to DB ---------------------- #
 
-# here env variable database_url is used to use postgresql provided by heroku, and blog.db is provided incase database_url doesn't work
+# here env variable database_url is used to use postgresql provided by heroku, and blog.db is provided incase database_url doesn't work during local development
 # newer versions of sqlalchemy has removed the support for "postgres://" uri scheme for postgresql database
 database_uri = os.environ.get("DATABASE_URL", "sqlite:///blog.db" )
 if database_uri.startswith("postgres://"):
@@ -96,7 +96,7 @@ class Comments(db.Model):
 
 
 # we run this command only once to create database
-# db.create_all()
+db.create_all()
 
 
 # ------- admin_login decorator ------------- #
