@@ -7,7 +7,7 @@ from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship
 from functools import wraps
 from flask_login import UserMixin, login_user, LoginManager, login_required, current_user, logout_user
-from forms import CreatePostForm, RegisterForm, LoginForm
+from forms import CreatePostForm, RegisterForm, LoginForm, CommentsForm
 from flask_gravatar import Gravatar
 
 app = Flask(__name__)
@@ -15,18 +15,34 @@ app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
 ckeditor = CKEditor(app)
 Bootstrap(app)
 
+# ----------- Gravatar Configurations ---------------------- #
+gravatar = Gravatar(app,
+                    size=100,
+                    rating='g',
+                    default='retro',
+                    force_default=False,
+                    force_lower=False,
+                    use_ssl=False,
+                    base_url=None)
 
-# -------- Login Manager
+
+# ----------- Login Manager ---------------------- #
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-# -------- CONNECT TO DB
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+
+# ----------- Connection to DB ---------------------- #
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///blog.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
 
-# -------- CONFIGURE TABLES
+# ----------- Database tables ---------------------- #
 class User(UserMixin, db.Model):
     __tablename__ = "user"
     id = db.Column(db.Integer, primary_key=True)
@@ -34,6 +50,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(250), unique=True)
     password = db.Column(db.String(100))
     posts = relationship("BlogPost", back_populates="author")
+    comments = relationship("Comments", back_populates="comment_author")
 
 
 class BlogPost(db.Model):
@@ -44,20 +61,36 @@ class BlogPost(db.Model):
     author_id = db.Column(db.Integer, db.ForeignKey("user.id"))
     # a reference to user object is created
     # back_populates is used to represent an additional relationship
-    author =relationship('User', back_populates="posts")
+    author = relationship('User', back_populates="posts")
 
     title = db.Column(db.String(250), unique=True, nullable=False)
     subtitle = db.Column(db.String(250), nullable=False)
     date = db.Column(db.String(250), nullable=False)
     body = db.Column(db.Text, nullable=False)
     img_url = db.Column(db.String(250), nullable=False)
+    comments = relationship("Comments", back_populates="parent_post")
+
+
+class Comments(db.Model):
+    __tablename__ = "comments"
+    id = db.Column(db.Integer, primary_key=True)
+
+    # relationship with user table
+    author_id = db.Column(db.Integer, db.ForeignKey("user.id"))
+    comment_author = relationship("User", back_populates="comments")
+
+    # relationship with blog_posts table
+    post_id = db.Column(db.Integer, db.ForeignKey("blog_posts.id"))
+    parent_post = relationship("BlogPost", back_populates="comments")
+
+    text = db.Column(db.Text, nullable=False)
 
 
 # we run this command only once to create database
-db.create_all()
+# db.create_all()
 
 
-# ------- admin_login decorator
+# ------- admin_login decorator ------------- #
 def admin_login(f):
     """checks for admin user"""
     @wraps(f)
@@ -68,19 +101,18 @@ def admin_login(f):
     return wrapper
 
 
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))
-
+# --------------- Functions --------------- #
 
 @app.route('/')
 def get_all_posts():
+    """Function to display all post on the index page"""
     posts = BlogPost.query.all()
     return render_template("index.html", all_posts=posts)
 
 
 @app.route('/register', methods=["GET", "POST"])
 def register():
+    """function to register new user"""
     form = RegisterForm()
     if form.validate_on_submit():
         email = form.email.data
@@ -105,6 +137,7 @@ def register():
 
 @app.route('/login', methods=["GET", "POST"])
 def login():
+    """Login function ....gets data from the login form and checks email and password if they exist and are correct and gets user logged in"""
     form=LoginForm()
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
@@ -124,14 +157,29 @@ def login():
 
 @app.route('/logout')
 def logout():
+    """loges out user"""
     logout_user()
     return redirect(url_for('get_all_posts'))
 
 
-@app.route("/post/<int:post_id>")
+@app.route("/post/<int:post_id>", methods=["GET", "POST"])
 def show_post(post_id):
+    """Function to show details of each blog and accept comments from user and save them to database"""
     requested_post = BlogPost.query.get(post_id)
-    return render_template("post.html", post=requested_post)
+    form = CommentsForm()
+    if form.validate_on_submit():
+        if current_user.is_authenticated:
+            new_comment = Comments(comment_author=current_user,
+                                   parent_post=requested_post,
+                                   text=form.comment.data
+                                   )
+            db.session.add(new_comment)
+            db.session.commit()
+
+        else:
+            flash("For submitting a comment, Please Login.")
+            return redirect(url_for("login"))
+    return render_template("post.html", post=requested_post, form=form)
 
 
 @app.route("/about")
@@ -148,6 +196,7 @@ def contact():
 @login_required
 @admin_login
 def add_new_post():
+    """function to add new blogs, and it can only be accessed by admin user"""
     form = CreatePostForm()
     if form.validate_on_submit():
         new_post = BlogPost(
@@ -168,6 +217,7 @@ def add_new_post():
 @login_required
 @admin_login
 def edit_post(post_id):
+    """function to edit a blog, admin user required to access it"""
     post = BlogPost.query.get(post_id)
     edit_form = CreatePostForm(
         title=post.title,
@@ -191,11 +241,12 @@ def edit_post(post_id):
 @app.route("/delete/<int:post_id>")
 @admin_login
 def delete_post(post_id):
+    """function to delete a blog from the database"""
     post_to_delete = BlogPost.query.get(post_id)
     db.session.delete(post_to_delete)
     db.session.commit()
     return redirect(url_for('get_all_posts'))
 
-
+# -------------------------------------------------------- #
 if __name__ == "__main__":
     app.run(debug=True)
